@@ -24,21 +24,21 @@ class SRData(data.Dataset):
 
         self._set_filesystem(cfg.DATASET.DATA_DIR)
         if cfg.DATASET.DATA_EXT.find('img') < 0:
-            path_bin = os.path.join(self.apath, 'bin')  # '/home/lzk/workspace/rcan-it/datasets/DIV2K/bin'
+            path_bin = os.path.join(self.apath, 'bin')
             os.makedirs(path_bin, exist_ok=True)
 
-        list_hr, list_lr = self._scan()     # get hr, lr path list
+        list_hr, list_lr = self._scan()
         if cfg.DATASET.DATA_EXT.find('bin') >= 0:
             # Binary files are stored in 'bin' folder
             # If the binary file exists, load it. If not, make it.
-            # list_hr, list_lr = self._scan()
+            list_hr, list_lr = self._scan()
             self.images_hr = self._check_and_load(
                 cfg.DATASET.DATA_EXT, list_hr, self._name_hrbin()
             )
             self.images_lr = [
                 self._check_and_load(cfg.DATASET.DATA_EXT,
                                      l, self._name_lrbin(s))
-                for s, l in zip(self.scale, list_lr)    # s: 4  l:
+                for s, l in zip(self.scale, list_lr)
             ]
         else:
             if cfg.DATASET.DATA_EXT.find('img') >= 0 or benchmark:
@@ -52,7 +52,7 @@ class SRData(data.Dataset):
                     os.makedirs(
                         os.path.join(
                             self.dir_lr.replace(self.apath, path_bin),
-                            'X{:.2f}'.format(s)
+                            'X{}'.format(s)
                         ),
                         exist_ok=True
                     )
@@ -76,44 +76,58 @@ class SRData(data.Dataset):
                         )
 
         if train:
-            self.n_train_samples = cfg.SOLVER.ITERATION_TOTAL * cfg.SOLVER.SAMPLES_PER_BATCH    # 200000 * batch size 16
-            n_patches = cfg.SOLVER.SAMPLES_PER_BATCH * cfg.SOLVER.TEST_EVERY    # batch size 16 * test every 1000
+            self.n_train_samples = cfg.SOLVER.ITERATION_TOTAL * cfg.SOLVER.SAMPLES_PER_BATCH    # <==> the sample times of one epoch
+            n_patches = cfg.SOLVER.SAMPLES_PER_BATCH * cfg.SOLVER.TEST_EVERY
             n_images = len(cfg.DATASET.DATA_TRAIN) * len(self.images_hr)
             if n_images == 0:
                 self.repeat = 0
             else:
                 self.repeat = max(n_patches // n_images, 1)
 
-    def _set_filesystem(self, dir_data):    # '/home/lzk/workspace/rcan-it/datasets'
-        self.apath = os.path.join(dir_data, self.name)          # '.../rcan-it/datasets/DIV2K'
-        self.dir_hr = os.path.join(self.apath, 'HR')            # '.../rcan-it/datasets/DIV2K/HR'
-        self.dir_lr = os.path.join(self.apath, 'LR_bicubic')    # '.../rcan-it/datasets/DIV2K/LR_bicubic'
-        if self.input_large:
-            self.dir_lr += 'L'
-        self.ext = ('.png', '.png')     # hr img and lr img ext, such as hr:0001.png, lr:0001x4.png
-
     def _scan(self):
         list_hr = []
         list_lr = [[] for _ in self.scale]
 
         for i in range(self.begin, self.end + 1):
-            filename = '{:0>4}'.format(i)   # '0001'
-            list_hr.append(os.path.join(self.dir_hr, filename + self.ext[0]))   # '.../rcan-it/datasets/DIV2K/DIV2K_train_HR/0001.png'
-            for si, s in enumerate(self.scale):     # s: 4    si: 0
+            filename = '{:0>4}'.format(i)
+            list_hr.append(os.path.join(self.dir_hr, filename + self.ext[0]))
+            for si, s in enumerate(self.scale):
                 list_lr[si].append(os.path.join(
-                    self.dir_lr,    # 先执行子类div2k的_set_filesystem ==> self.dir_lr '.../rcan-it/datasets/DIV2K/DIV2K_train_LR_bicubic'
+                    self.dir_lr,
                     'X{}/{}x{}{}'.format(s, filename, s, self.ext[1])
-                ))  # [['.../rcan-it/datasets/DIV2K/DIV2K_train_LR_bicubic/X4/0001x4.png']]
+                ))
 
         return list_hr, list_lr
 
-    def _check_and_load(self, ext, l, f, verbose=True, load=True):  # ext: 'bin', l: list of img path, f: '.../rcan-it/datasets/DIV2K/bin/train_bin_HR.pt'
+    def _set_filesystem(self, dir_data):
+        self.apath = os.path.join(dir_data, self.name)
+        self.dir_hr = os.path.join(self.apath, 'HR')
+        self.dir_lr = os.path.join(self.apath, 'LR_bicubic')
+        if self.input_large:
+            self.dir_lr += 'L'
+        self.ext = ('.png', '.png')
+
+    def _name_hrbin(self):
+        return os.path.join(
+            self.apath,
+            'bin',
+            '{}_bin_HR.pt'.format(self.split)
+        )
+
+    def _name_lrbin(self, scale):
+        return os.path.join(
+            self.apath,
+            'bin',
+            '{}_bin_LR_X{}.pt'.format(self.split, scale)
+        )
+
+    def _check_and_load(self, ext, l, f, verbose=True, load=True):
         if os.path.isfile(f) and ext.find('reset') < 0:
             if load:
                 if verbose:
-                    print('Loading {}...'.format(f))    # Loading /home/lzk/workspace/rcan-it/datasets/DIV2K/bin/train_bin_HR.pt...
+                    print('Loading {}...'.format(f))
                 with open(f, 'rb') as _f:
-                    ret = pickle.load(_f)   # too slow
+                    ret = pickle.load(_f)
                 return ret[:len(l)]     # 读取指定图像数
             else:
                 return None
@@ -139,23 +153,11 @@ class SRData(data.Dataset):
                 with open(f, 'wb') as _f:
                     pickle.dump(b, _f)
 
-    def _name_hrbin(self):
-        return os.path.join(
-            self.apath,
-            'bin',
-            '{}_bin_HR.pt'.format(self.split)
-        )   # '.../rcan-it/datasets/DIV2K/bin/train_bin_HR.pt'
-
-    def _name_lrbin(self, scale):
-        return os.path.join(
-            self.apath,
-            'bin',
-            '{}_bin_LR_X{}.pt'.format(self.split, scale)
-        )   # '.../rcan-it/datasets/DIV2K/train_bin_LR_X4.pt'
+            # return b
 
     def __getitem__(self, idx):
         lr, hr, filename = self._load_file(idx)
-        pair = self.get_patch(lr, hr)   # tuple(lr_patch, hr_patch)
+        pair = self.get_patch(lr, hr)
         pair = common.set_channel(*pair, n_channels=self.cfg.DATASET.CHANNELS)
         pair_t = common.np2Tensor(*pair, rgb_range=self.cfg.DATASET.RGB_RANGE)
 
@@ -167,17 +169,24 @@ class SRData(data.Dataset):
         else:
             return len(self.images_hr)
 
+    def _get_index(self, idx):
+        if not self.train:
+            return idx
+
+        idx = random.randrange(self.n_train_samples)
+        return idx % len(self.images_hr)
+
     def _load_file(self, idx):
         idx = self._get_index(idx)
-        f_hr = self.images_hr[idx]      # get one hr_img from total 800 hr_imgs e.g. dict{'name':'0084','image':Array(1368, 2040, 3)}
-        f_lr = self.images_lr[self.idx_scale][idx]      # get lr_img for corresponding hr_img e.g. dict{'name':'0084x4','image':Array(342, 510, 3)}
+        f_hr = self.images_hr[idx]
+        f_lr = self.images_lr[self.idx_scale][idx]
 
         if self.cfg.DATASET.DATA_EXT.find('bin') >= 0:
             filename = f_hr['name']
             hr = f_hr['image']
             lr = f_lr['image']
         else:
-            filename, _ = os.path.splitext(os.path.basename(f_hr))  # os.path.basename() will return the last name of path
+            filename, _ = os.path.splitext(os.path.basename(f_hr))
             if self.cfg.DATASET.DATA_EXT == 'img' or self.benchmark:
                 hr = imageio.imread(f_hr)
                 lr = imageio.imread(f_lr)
@@ -188,13 +197,6 @@ class SRData(data.Dataset):
                     lr = pickle.load(_f)
 
         return lr, hr, filename
-
-    def _get_index(self, idx):
-        if not self.train:
-            return idx
-
-        idx = random.randrange(self.n_train_samples)
-        return idx % len(self.images_hr)
 
     def get_patch(self, lr, hr):
         scale = self.scale[self.idx_scale]
@@ -209,14 +211,13 @@ class SRData(data.Dataset):
             lr_patch, hr_patch = common.get_patch(
                 lr, hr, patch_size=self.cfg.DATASET.OUT_PATCH_SIZE,
                 scale=scale, multi=(len(self.scale) > 1),
-                input_large=self.input_large
-            )
+                input_large=self.input_large)
 
             rej_cfg = self.cfg.DATASET.REJECTION_SAMPLING
             if not rej_cfg.ENABLED:
                 break
 
-            bicub_sr = resize(lr_patch, hr_patch.shape, order=3,    # bicubic
+            bicub_sr = resize(lr_patch, hr_patch.shape, order=3,  # bicubic
                               preserve_range=True, anti_aliasing=False)
             bicub_psnr = calc_psnr_numpy(bicub_sr, hr_patch, scale,
                                          float(self.cfg.DATASET.RGB_RANGE))
@@ -229,7 +230,13 @@ class SRData(data.Dataset):
                 lr_patch, hr_patch, invert=aug_cfg.INVERT,
                 c_shuffle=aug_cfg.CHANNEL_SHUFFLE)
 
-        return lr_patch, hr_patch   # Array 0~255
+        return lr_patch, hr_patch
+
+    def set_scale(self, idx_scale):
+        if not self.input_large:
+            self.idx_scale = idx_scale
+        else:
+            self.idx_scale = random.randint(0, len(self.scale) - 1)
 
 
 
